@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use drm::Device as BasicDevice;
-use drm::control::{Device as ControlDevice, Mode, connector, crtc, framebuffer, plane};
+use drm::control::{Device as ControlDevice, Mode, connector, crtc, framebuffer, plane, property};
 
 use libc::dev_t;
 
@@ -351,6 +351,37 @@ impl DrmSurface {
         }
     }
 
+    /// Sets a property of one of this surface's connectors by name, such as `Colorspace`,
+    /// `max bpc` or `HDR_OUTPUT_METADATA`, and keeps it for every later modeset of the surface.
+    ///
+    /// The value is raw: an enum's value, a range's number, a blob's id. It is tested at once,
+    /// with a modeset, and is applied by the next [`commit`](DrmSurface::commit), so changing it
+    /// makes [`DrmSurface::commit_pending`] return `true`. Page flips do not send it: the kernel
+    /// keeps the value until a later modeset changes it.
+    ///
+    /// Smithay does not read the value: a blob it names is owned by the caller, which keeps it
+    /// alive until a commit has replaced it. Only the properties set here are managed; the others
+    /// keep whatever value the kernel holds.
+    ///
+    /// Errors with [`Error::UnknownConnector`] if the connector is not one of this surface's
+    /// pending connectors, [`Error::UnknownProperty`] if it has no such property, and
+    /// [`Error::TestFailed`] if the driver refuses the value. Legacy DRM returns
+    /// [`Error::UnknownProperty`].
+    pub fn set_connector_property(
+        &self,
+        connector: connector::Handle,
+        name: &'static str,
+        value: property::RawValue,
+    ) -> Result<(), Error> {
+        match &*self.internal {
+            DrmSurfaceInternal::Atomic(surf) => surf.set_connector_property(connector, name, value),
+            DrmSurfaceInternal::Legacy(_) => Err(Error::UnknownProperty {
+                handle: connector.into(),
+                name,
+            }),
+        }
+    }
+
     /// Disables the given plane.
     ///
     /// Errors if the plane is not supported by this crtc or if the underlying
@@ -368,6 +399,7 @@ impl DrmSurface {
     /// - [`add_connector`](DrmSurface::add_connector)
     /// - [`remove_connector`](DrmSurface::remove_connector)
     /// - [`use_mode`](DrmSurface::use_mode)
+    /// - [`set_connector_property`](DrmSurface::set_connector_property)
     pub fn commit_pending(&self) -> bool {
         match &*self.internal {
             DrmSurfaceInternal::Atomic(surf) => surf.commit_pending(),
