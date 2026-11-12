@@ -363,10 +363,10 @@ impl DrmSurface {
     /// alive until a commit has replaced it. Only the properties set here are managed; the others
     /// keep whatever value the kernel holds.
     ///
-    /// Errors with [`Error::UnknownConnector`] if the connector is not one of this surface's
-    /// pending connectors, [`Error::UnknownProperty`] if it has no such property, and
-    /// [`Error::TestFailed`] if the driver refuses the value. Legacy DRM returns
-    /// [`Error::UnknownProperty`].
+    /// Errors with [`Error::DeviceInactive`] if the device is paused, [`Error::UnknownConnector`]
+    /// if the connector is not one of this surface's pending connectors,
+    /// [`Error::UnknownProperty`] if it has no such property, and [`Error::TestFailed`] if the
+    /// driver refuses the value. Legacy DRM returns [`Error::UnknownProperty`].
     pub fn set_connector_property(
         &self,
         connector: connector::Handle,

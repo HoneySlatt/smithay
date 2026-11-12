@@ -737,9 +737,9 @@ impl AtomicDrmSurface {
         }
 
         // check that the driver takes the value, with a modeset, before keeping it
-        let test_buffer = self.create_test_buffer(pending.mode.size(), self.plane)?;
         let prop_mapping = self.prop_mapping.read().unwrap();
         prop_mapping.conn_prop_handle(conn, name)?;
+        let test_buffer = self.create_test_buffer(pending.mode.size(), self.plane)?;
         let plane_state = PlaneState {
             handle: self.plane,
             config: Some(PlaneConfig {
