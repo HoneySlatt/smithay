@@ -159,11 +159,14 @@ impl<D: SeatHandler> Inner<D> {
 /// Global data of WlSeat
 pub struct SeatGlobalData<D: SeatHandler> {
     arc: Arc<SeatRc<D>>,
+    filter: Box<dyn Fn(&wayland_server::Client) -> bool + Send + Sync>,
 }
 
 impl<D: SeatHandler> fmt::Debug for SeatGlobalData<D> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SeatGlobalData").field("arc", &self.arc).finish()
+        f.debug_struct("SeatGlobalData")
+            .field("arc", &self.arc)
+            .finish_non_exhaustive()
     }
 }
 
@@ -183,9 +186,34 @@ impl<D: SeatHandler + 'static> SeatState<D> {
         <D as SeatHandler>::KeyboardFocus: WaylandFocus,
         N: Into<String>,
     {
+        self.new_wl_seat_with_filter(display, name, |_| true)
+    }
+
+    /// Create a new seat global shown only to the clients `filter` accepts
+    ///
+    /// As [`SeatState::new_wl_seat`], except that a client `filter` refuses neither sees the
+    /// global announced nor may bind it.
+    pub fn new_wl_seat_with_filter<N>(
+        &mut self,
+        display: &DisplayHandle,
+        name: N,
+        filter: impl Fn(&wayland_server::Client) -> bool + Send + Sync + 'static,
+    ) -> Seat<D>
+    where
+        D: GlobalDispatch<WlSeat, SeatGlobalData<D>> + SeatHandler + 'static,
+        <D as SeatHandler>::PointerFocus: WaylandFocus,
+        <D as SeatHandler>::KeyboardFocus: WaylandFocus,
+        N: Into<String>,
+    {
         let Seat { arc } = self.new_seat(name);
 
-        let global_id = display.create_global::<D, _, _>(9, SeatGlobalData { arc: arc.clone() });
+        let global_id = display.create_global::<D, _, _>(
+            9,
+            SeatGlobalData {
+                arc: arc.clone(),
+                filter: Box::new(filter),
+            },
+        );
         arc.inner.lock().unwrap().global = Some(global_id);
 
         Seat { arc }
@@ -408,5 +436,9 @@ where
 
         resource.capabilities(inner.compute_caps());
         inner.known_seats.push(resource.downgrade());
+    }
+
+    fn can_view(&self, client: &wayland_server::Client) -> bool {
+        (self.filter)(client)
     }
 }
