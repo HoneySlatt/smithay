@@ -105,10 +105,21 @@ pub struct OutputManagerState {
     xdg_output_manager: Option<GlobalId>,
 }
 
+/// Which clients a global may be shown to.
+type ClientFilter = Box<dyn Fn(&Client) -> bool + Send + Sync>;
+
 /// Internal data of a wl_output global
-#[derive(Debug)]
 pub struct WlOutputData {
     output: Output,
+    filter: ClientFilter,
+}
+
+impl std::fmt::Debug for WlOutputData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WlOutputData")
+            .field("output", &self.output)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Events initiated by the clients interacting with outputs
@@ -206,9 +217,31 @@ impl Output {
         D: GlobalDispatch<WlOutput, WlOutputData>,
         D: 'static,
     {
+        self.create_global_with_filter::<D>(display, |_| true)
+    }
+
+    /// Create a new output global shown only to the clients `filter` accepts.
+    ///
+    /// As [`Output::create_global`], except that a client `filter` refuses neither sees the
+    /// global announced nor may bind it.
+    pub fn create_global_with_filter<D>(
+        &self,
+        display: &DisplayHandle,
+        filter: impl Fn(&Client) -> bool + Send + Sync + 'static,
+    ) -> GlobalId
+    where
+        D: GlobalDispatch<WlOutput, WlOutputData>,
+        D: 'static,
+    {
         info!(output = self.name(), "Creating new wl_output");
         self.inner.0.lock().unwrap().handle = Some(display.backend_handle().downgrade());
-        display.create_global::<D, WlOutput, _>(4, WlOutputData { output: self.clone() })
+        display.create_global::<D, WlOutput, _>(
+            4,
+            WlOutputData {
+                output: self.clone(),
+                filter: Box::new(filter),
+            },
+        )
     }
 
     /// Attempt to retrieve a [`Output`] from an existing resource
