@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use wayland_protocols_wlr::virtual_pointer::v1::server::zwlr_virtual_pointer_v1::ZwlrVirtualPointerV1;
-use wayland_server::Resource;
 use wayland_server::protocol::wl_seat::WlSeat;
+use wayland_server::{Client, Resource};
 
 use crate::backend::input::{self, Axis, AxisSource, InputBackend, InputTime, UnusedEvent};
 use crate::output::{Output, WeakOutput};
@@ -79,6 +79,14 @@ impl VirtualPointerDevice {
     /// The seat this virtual pointer was created for, if any.
     pub fn wl_seat(&self) -> Option<&WlSeat> {
         self.data.seat.as_ref()
+    }
+
+    /// The client that created this virtual pointer, if it's still alive.
+    ///
+    /// A pointer created without a seat is for the seat its client's input
+    /// goes to, which only the compositor knows.
+    pub fn client(&self) -> Option<Client> {
+        self.pointer.client()
     }
 
     /// Output requested by the client, if it still exists.
