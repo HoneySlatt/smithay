@@ -21,6 +21,7 @@ use crate::input::{
 };
 use crate::utils::{IsAlive, alive_tracker::AliveTracker};
 use crate::wayland::Dispatch2;
+use crate::wayland::selection::SelectionTarget;
 use crate::wayland::selection::offer::OfferReplySource;
 use crate::wayland::selection::seat_data::SeatData;
 use crate::wayland::selection::source::SelectionSourceProvider;
@@ -99,13 +100,20 @@ where
             .unwrap()
             .borrow_mut();
 
-        match seat_data.get_clipboard_selection() {
+        let cleared = match seat_data.get_clipboard_selection() {
             Some(OfferReplySource::Client(SelectionSourceProvider::DataDevice(set_source)))
                 if set_source == source =>
             {
-                seat_data.set_clipboard_selection::<D>(&self.display_handle, None)
+                seat_data.set_clipboard_selection::<D>(&self.display_handle, None);
+                true
             }
-            _ => (),
+            _ => false,
+        };
+        drop(seat_data);
+
+        // The compositor learns that the selection ended, as when its client clears it.
+        if cleared {
+            state.new_selection(SelectionTarget::Clipboard, None, seat);
         }
     }
 }

@@ -14,6 +14,7 @@ use crate::{
 };
 
 use super::PrimarySelectionHandler;
+use crate::wayland::selection::SelectionTarget;
 
 /// The metadata describing a data source
 #[derive(Debug, Default, Clone)]
@@ -83,13 +84,20 @@ where
             .unwrap()
             .borrow_mut();
 
-        match seat_data.get_primary_selection() {
+        let cleared = match seat_data.get_primary_selection() {
             Some(OfferReplySource::Client(SelectionSourceProvider::Primary(set_source)))
                 if set_source == source =>
             {
-                seat_data.set_primary_selection::<D>(&self.display_handle, None)
+                seat_data.set_primary_selection::<D>(&self.display_handle, None);
+                true
             }
-            _ => (),
+            _ => false,
+        };
+        drop(seat_data);
+
+        // The compositor learns that the selection ended, as when its client clears it.
+        if cleared {
+            state.new_selection(SelectionTarget::Primary, None, seat);
         }
     }
 }
